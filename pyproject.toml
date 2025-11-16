@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "mistral_pdf_translator"
+version = "0.1.0"
+description = "Traduz PDF ou EPUB para Português com OpenAI, GUI em CustomTkinter"
+authors = ["Gabriel <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+PyPDF2 = "^3.0"
+tqdm = "^4.66"
+ebooklib = "^0.18"
+beautifulsoup4 = "^4.12"
+reportlab = "^4.0"
+openai = "^1.55"
+customtkinter = "^5.2"
+
+[tool.poetry.scripts]
+translate = "translator.main:cli"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
