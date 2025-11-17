@@ -89,3 +89,7 @@ Boas práticas aplicadas:
 
 ## Licença
 - Uso interno do projeto. Ajuste conforme necessidade.
+
+
+<img width="1109" height="834" alt="{25227BBE-BF47-4192-BE0C-712D6EE23389}" src="https://github.com/user-attachments/assets/11cf8cce-533a-46ee-971a-4a293b0815b6" />
+
