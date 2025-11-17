@@ -74,10 +74,6 @@ pyinstaller --noconfirm --onefile --windowed --name TradutorAI \
 
 Boas práticas aplicadas:
 - Separação por responsabilidade (reader, translator, exporter, GUI)
-- Streaming e thread background para evitar travamentos
-- Variáveis de ambiente para segredos
-- Sem logs de segredos
-- Exportação sem cabeçalhos “Parte X” para saída limpa
 
 ## Dicas de Desempenho
 - Reduza `Chars por chunk` se o modelo demorar
