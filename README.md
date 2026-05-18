@@ -1,95 +1,130 @@
 # Tradutor AI
 
-Aplicação para traduzir arquivos PDF ou EPUB para Português usando OpenAI. Interface moderna (CustomTkinter), exportação em PDF/EPUB/TXT, prévia em tempo real.
+Traduz arquivos PDF ou EPUB para Português usando OpenAI (GPT). Interface web (React + Tailwind), API REST (FastAPI) e CLI.
 
-## Recursos
-- Leitura de `.pdf` e `.epub`
-- Tradução com `OpenAI` (API)
-- Divisão em chunks por número de caracteres
-- Exportação em `pdf`, `epub` e `txt`
-- Interface escura com acentos verdes, barra de progresso e prévia em tempo real
+---
+
+## Arquitetura (monorepo)
+
+```
+translate_ai/
+├── backend/              # API FastAPI
+│   ├── main.py           # App principal + static files (produção)
+│   ├── task_manager.py   # Tasks assíncronas com SSE
+│   ├── routes/
+│   │   ├── upload.py     # POST /upload
+│   │   ├── translate.py  # POST /translate (SSE), cancel, status
+│   │   └── download.py   # GET /download/{task_id}
+│   └── Dockerfile
+├── frontend/             # React + Vite + Tailwind
+│   ├── src/
+│   │   ├── App.tsx       # Orquestrador de estado
+│   │   ├── api.ts        # Cliente HTTP + SSE
+│   │   └── components/   # FileUpload, ConfigForm, PreviewPane, etc.
+│   ├── nginx.conf
+│   └── Dockerfile
+├── translator/           # Core (compartilhado)
+│   ├── pipeline.py       # Orquestração de tradução
+│   ├── openai_translator.py  # API OpenAI + retry
+│   ├── chunker.py        # Chunking por chars e tokens
+│   ├── pdf_reader.py     # Leitura de PDF
+│   ├── epub_reader.py    # Leitura de EPUB
+│   ├── exporter.py       # Exportação PDF/EPUB/TXT
+│   ├── validation.py     # Validação de configuração
+│   └── logger.py         # Logging estruturado
+├── tests/                # 54 testes (pytest)
+├── legacy/               # Desktop app (CustomTkinter) — arquivado
+├── docker-compose.yml
+├── pyproject.toml
+└── poetry.lock
+```
 
 ## Requisitos
-- Python 3.11+
-- Dependências do projeto instaladas
-- Chave `OPENAI_API_KEY` para uso com OpenAI
 
-## Instalação
-1. Crie/ative um ambiente virtual
-   - Windows: `python -m venv .venv && .venv\Scripts\activate`
-2. Instale dependências
-   - `pip install -r requirements.txt` se existir, ou
-   - `pip install PyPDF2 tqdm ebooklib beautifulsoup4 reportlab openai customtkinter`
+- Python 3.11+ · Poetry
+- Node.js 20+ · npm (para frontend)
+- Chave da API OpenAI
 
-## Configuração
-- GUI: preencha o campo “API Key” com sua chave OpenAI.
+## Desenvolvimento
 
-## Execução (dev)
-- Interface desktop: `python -m translator.gui_app`
-- CLI simples: `python -m translator.main` (abre diálogos nativos)
+### Backend + CLI
 
-## Geração de Executável
-Recomendado `onedir` (mais estável com `customtkinter`).
-
-### One-dir (pasta com `.exe`)
-```
-python -m pip install --upgrade pyinstaller pyinstaller-hooks-contrib
-pyinstaller --noconfirm --onedir --windowed --name TradutorAI --collect-all customtkinter translator\gui_app.py
-```
-- Executável em `dist\TradutorAI\TradutorAI.exe`
-
-### One-file (único `.exe`)
-```
-pyinstaller --noconfirm --onefile --windowed --name TradutorAI --collect-all customtkinter translator\gui_app.py
-```
-- Se faltar temas/fontes do `customtkinter`, adicione dados:
-```
-pyinstaller --noconfirm --onefile --windowed --name TradutorAI \
-  --add-data "C:\\Users\\<usuario>\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages\\customtkinter;customtkinter" \
-  translator\gui_app.py
+```bash
+poetry install
+poetry run python -m translator.main <input.pdf> <output.pdf>
 ```
 
-### Observações de build
-- Caso utilize `onefile`, o início pode ser mais lento por extração temporária.
-- Se faltar temas/fontes do `customtkinter`, use `--collect-all customtkinter` ou `--add-data`.
+### Frontend (dev)
 
-## Uso da GUI
-1. Selecione o arquivo de entrada (`.pdf` ou `.epub`)
-2. Selecione a pasta de saída
-3. Defina `Modelo`, `Chars por chunk` e `Formato de saída`
-4. Informe sua `API Key`
-5. Clique em `Iniciar`; acompanhe progresso, legenda e prévia
-6. `Cancelar` interrompe o processo com segurança
+```bash
+cd frontend && npm install && npm run dev
+```
 
-## Organização do Projeto
-- `translator/`
-  - `gui_app.py`: Interface desktop
-  - `main.py`: CLI simples
-  - `pipeline.py`: fluxo unificado de tradução
-  - `types.py`: tipos de configuração e métricas
-  - `pdf_reader.py`, `epub_reader.py`: leitura de fontes
-  - `chunker.py`: divisão em chunks
-  - `openai_translator.py`: tradução OpenAI (stream e não-stream)
-  - `exporter.py`: exportação para `pdf`, `epub` e `txt`
+Proxy automático de `/api` → `http://127.0.0.1:8000`.
 
-Boas práticas aplicadas:
-- Separação por responsabilidade (reader, translator, exporter, GUI)
+### Full stack (dev)
 
-## Dicas de Desempenho
-- Reduza `Chars por chunk` se o modelo demorar
-- Preferir modelos menores acelera e reduz custo
+```bash
+# Terminal 1
+poetry run uvicorn backend.main:app --reload --port 8000
 
-## Solução de Problemas
-- Falta de temas do `customtkinter` no `.exe`:
-  - Use `--collect-all customtkinter` ou `--add-data` conforme acima
-- Problemas com chave da API:
-  - Certifique-se de preencher a “API Key” na GUI ou use `--api-key` na CLI
-- Erros de dependência:
-  - Atualize: `python -m pip install --upgrade pyinstaller pyinstaller-hooks-contrib`
+# Terminal 2
+cd frontend && npm run dev
+```
 
-## Licença
-- Uso interno do projeto. Ajuste conforme necessidade.
+Acessar `http://localhost:5173`.
 
+## Produção (Docker)
 
-<img width="1109" height="834" alt="{25227BBE-BF47-4192-BE0C-712D6EE23389}" src="https://github.com/user-attachments/assets/11cf8cce-533a-46ee-971a-4a293b0815b6" />
+```bash
+OPENAI_API_KEY=sk-... docker compose up -d
+```
 
+- Frontend: `http://localhost:8080`
+- Backend (API): `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+
+Sem Docker, build manual:
+
+```bash
+cd frontend && npm run build
+poetry run uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+O backend serve automaticamente o frontend buildado.
+
+## API Endpoints
+
+| Método | Rota | Descrição |
+|--------|------|----------|
+| GET | `/health` | Health check |
+| POST | `/upload` | Upload PDF/EPUB → `file_id` |
+| POST | `/translate` | Inicia tradução → `task_id` |
+| GET | `/translate/{task_id}` | SSE stream (tokens + progresso) |
+| GET | `/translate/{task_id}/status` | Status atual |
+| POST | `/translate/{task_id}/cancel` | Cancela tradução |
+| GET | `/download/{task_id}` | Download do resultado |
+
+## Testes
+
+```bash
+poetry run pytest            # 54 testes
+poetry run pytest --cov=translator,backend,tests --cov-report=term
+poetry run ruff check .
+poetry run mypy translator/
+```
+
+## Melhorias implementadas
+
+- ✅ Retry com exponential backoff (tenacity)
+- ✅ Chunking por tokens (tiktoken)
+- ✅ Validação de inputs
+- ✅ Processamento paralelo de chunks
+- ✅ Persistência de progresso (resume)
+- ✅ Parâmetros configuráveis (temperature, top_p, max_tokens)
+- ✅ Logging estruturado
+- ✅ CI/CD (GitHub Actions)
+- ✅ Pre-commit hooks (ruff, mypy)
+- ✅ Docker Compose
+- ✅ 54 testes unitários + integração
+- ✅ pypdf (substitui PyPDF2 obsoleto)

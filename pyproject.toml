@@ -1,21 +1,56 @@
 [tool.poetry]
-name = "mistral_pdf_translator"
-version = "0.1.0"
-description = "Traduz PDF ou EPUB para Português com OpenAI, GUI em CustomTkinter"
-authors = ["Gabriel <you@example.com>"]
+name = "translate_ai"
+version = "0.2.0"
+description = "Traduz PDF ou EPUB para Português com OpenAI. Interface web (React) + CLI."
+authors = ["Gabriel"]
+packages = [{include = "translator", from = "backend"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-PyPDF2 = "^3.0"
+pypdf = "^5.1"
 tqdm = "^4.66"
 ebooklib = "^0.18"
 beautifulsoup4 = "^4.12"
 reportlab = "^4.0"
 openai = "^1.55"
-customtkinter = "^5.2"
+tenacity = "^9.0"
+tiktoken = "^0.13"
+fastapi = "^0.136"
+uvicorn = "^0.47"
+python-multipart = "^0.0"
+sse-starlette = "^3.4"
+httpx = "^0.28"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.24"
+pytest-cov = "^6.0"
+ruff = "^0.8"
+mypy = "^1.13"
+pre-commit = "^4.0"
 
 [tool.poetry.scripts]
 translate = "translator.main:cli"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "N", "UP", "B", "S", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

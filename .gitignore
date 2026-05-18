@@ -5,3 +5,31 @@ __pycache__/
 *.spec
 *.pyc
 .DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Environment
+.env
+.env.local
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.next/
+frontend/build/
+
+# Generated
+*.log

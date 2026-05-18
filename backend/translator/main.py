@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 import tkinter as tk
@@ -7,10 +8,25 @@ from typing import List
 
 from .types import TranslationConfig
 from .pipeline import run_translation
+from .logger import get_logger
 from tqdm import tqdm
 
+logger = get_logger(__name__)
 
-def process(input_path: str, out_path: str, chunk_chars: int = 4000, model: str = "gpt-4o-mini", api_key: str | None = None, show_text: bool = False, preview_chars: int = 400) -> None:
+
+def process(
+    input_path: str,
+    out_path: str,
+    chunk_chars: int = 4000,
+    model: str = "gpt-4o-mini",
+    api_key: str | None = None,
+    show_text: bool = False,
+    preview_chars: int = 400,
+    temperature: float = 0,
+    top_p: float = 1.0,
+    max_tokens: int | None = None,
+    parallel_chunks: int = 1,
+) -> None:
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Arquivo não encontrado: {input_path}")
 
@@ -21,6 +37,10 @@ def process(input_path: str, out_path: str, chunk_chars: int = 4000, model: str 
         chunk_chars=chunk_chars,
         model=model,
         api_key=api_key,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        parallel_chunks=parallel_chunks,
     )
     def on_chunk_start(idx: int, total: int):
         if show_text:
@@ -32,6 +52,7 @@ def process(input_path: str, out_path: str, chunk_chars: int = 4000, model: str 
         pass
     final_out = run_translation(cfg, on_chunk_start=on_chunk_start, on_token=on_token, on_progress=on_progress)
     print(f"Pronto! Arquivo salvo em: {final_out}")
+    logger.info("CLI concluída: %s", final_out)
 
 
 def get_downloads_dir() -> str:
@@ -49,7 +70,7 @@ def gui_select_and_process(chunk_chars: int = 4000, model: str = "gpt-4o-mini") 
         filetypes=[("Documentos", "*.pdf *.epub"), ("PDF", "*.pdf"), ("EPUB", "*.epub")]
     )
     if not input_path:
-        print("Nenhum arquivo selecionado. Encerrando.")
+        logger.info("Nenhum arquivo selecionado na GUI. Encerrando.")
         return
 
     base_name = os.path.splitext(os.path.basename(input_path))[0]
@@ -84,8 +105,23 @@ def cli():
     parser.add_argument("--api-key", type=str, default=None, help="Chave da API OpenAI (se não usar GUI)")
     parser.add_argument("--show-text", action="store_true", help="Mostrar trecho traduzido no terminal")
     parser.add_argument("--preview-chars", type=int, default=400, help="Quantidade de caracteres mostrados por parte")
+    parser.add_argument("--temperature", type=float, default=0, help="Temperatura do modelo (0-2)")
+    parser.add_argument("--top-p", type=float, default=1.0, help="Top-p sampling (0-1)")
+    parser.add_argument("--max-tokens", type=int, default=None, help="Máximo de tokens por resposta")
+    parser.add_argument("--parallel", type=int, default=1, help="Número de traduções em paralelo")
     args = parser.parse_args()
-    process(args.input, args.out, chunk_chars=args.chunk_chars, model=args.model, api_key=args.api_key, show_text=args.show_text, preview_chars=args.preview_chars)
+    process(
+        args.input, args.out,
+        chunk_chars=args.chunk_chars,
+        model=args.model,
+        api_key=args.api_key,
+        show_text=args.show_text,
+        preview_chars=args.preview_chars,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        max_tokens=args.max_tokens,
+        parallel_chunks=args.parallel,
+    )
 
 
 if __name__ == "__main__":

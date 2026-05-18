@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 import threading
@@ -7,6 +8,9 @@ from typing import List
 
 from translator.pipeline import run_translation
 from translator.types import TranslationConfig, ProgressStats
+from translator.logger import setup_logger
+
+logger = setup_logger("translate_ai")
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("green")
