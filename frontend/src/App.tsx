@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { uploadFile, startTranslation, cancelTranslation, createTranslationStream, getDownloadUrl } from "./api";
 import type { ProgressData, TaskStatus } from "./types";
 import FileUpload from "./components/FileUpload";
@@ -19,20 +19,32 @@ export default function App() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const safeSet = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: T) => {
+    if (mountedRef.current) setter(value);
+  }, []);
 
   const handleUpload = useCallback(async (f: File) => {
-    setFile(f);
-    setStatus("uploading");
-    setErrorMsg("");
+    safeSet(setFile, f);
+    safeSet(setStatus, "uploading");
+    safeSet(setErrorMsg, "");
     try {
       const { file_id } = await uploadFile(f);
-      setFileId(file_id);
-      setStatus("idle");
+      safeSet(setFileId, file_id);
+      safeSet(setStatus, "idle");
     } catch (err: any) {
-      setErrorMsg(err.message || "Falha no upload");
-      setStatus("error");
+      safeSet(setErrorMsg, err.message || "Falha no upload");
+      safeSet(setStatus, "error");
     }
-  }, []);
+  }, [safeSet]);
 
   const handleTranslate = useCallback(async (config: {
     model: string;
@@ -41,15 +53,19 @@ export default function App() {
     out_format: string;
     base_url: string | null;
   }) => {
-    if (!fileId || !apiKey) return;
+    if (!fileId || !apiKey || status === "translating") return;
+    if (!mountedRef.current) return;
 
-    setStatus("translating");
-    setTranslatedText("");
-    setProgress(null);
-    setErrorMsg("");
+    safeSet(setStatus, "translating");
+    safeSet(setTranslatedText, "");
+    safeSet(setProgress, null);
+    safeSet(setErrorMsg, "");
 
     let tid = "";
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
       const { task_id } = await startTranslation({
         file_id: fileId,
         api_key: apiKey,
@@ -61,53 +77,64 @@ export default function App() {
         max_tokens: null,
         parallel_chunks: 1,
         base_url: config.base_url,
-      });
+      }, controller.signal);
+
+      clearTimeout(timeout);
       tid = task_id;
-      setTaskId(tid);
+      safeSet(setTaskId, tid);
     } catch (err: any) {
-      setErrorMsg(err.message || "Falha ao iniciar tradução");
-      setStatus("error");
+      if (err.name === "AbortError") {
+        safeSet(setErrorMsg, "Tempo limite excedido ao iniciar tradução. Tente novamente.");
+      } else {
+        safeSet(setErrorMsg, err.message || "Falha ao iniciar tradução");
+      }
+      safeSet(setStatus, "error");
       return;
     }
 
+    if (!mountedRef.current) return;
+
     abortRef.current = createTranslationStream(
       tid,
-      (text) => setTranslatedText((prev) => prev + text),
-      (data) => setProgress(data),
+      (text) => { if (mountedRef.current) setTranslatedText((prev) => prev + text); },
+      (data) => { if (mountedRef.current) setProgress(data); },
       (result) => {
+        if (!mountedRef.current) return;
         if (result.status === "completed") {
-          setStatus("completed");
+          safeSet(setStatus, "completed");
         } else if (result.status === "cancelled") {
-          setStatus("idle");
+          safeSet(setStatus, "idle");
         } else {
-          setErrorMsg(result.error || "Erro na tradução");
-          setStatus("error");
+          safeSet(setErrorMsg, result.error || "Erro na tradução");
+          safeSet(setStatus, "error");
         }
       },
       (err) => {
-        setErrorMsg(err.message);
-        setStatus("error");
+        if (!mountedRef.current) return;
+        safeSet(setErrorMsg, err.message);
+        safeSet(setStatus, "error");
       },
     );
-  }, [fileId, apiKey]);
+  }, [fileId, apiKey, status, safeSet]);
 
   const handleCancel = useCallback(async () => {
     if (taskId) {
       abortRef.current?.abort();
       await cancelTranslation(taskId).catch(() => {});
-      setStatus("idle");
+      safeSet(setStatus, "idle");
     }
-  }, [taskId]);
+  }, [taskId, safeSet]);
 
   const handleReset = useCallback(() => {
-    setFile(null);
-    setFileId(null);
-    setTaskId(null);
-    setTranslatedText("");
-    setProgress(null);
-    setStatus("idle");
-    setErrorMsg("");
-  }, []);
+    abortRef.current?.abort();
+    safeSet(setFile, null);
+    safeSet(setFileId, null);
+    safeSet(setTaskId, null);
+    safeSet(setTranslatedText, "");
+    safeSet(setProgress, null);
+    safeSet(setStatus, "idle");
+    safeSet(setErrorMsg, "");
+  }, [safeSet]);
 
   const downloadUrl = taskId && status === "completed" ? getDownloadUrl(taskId) : null;
 
@@ -161,7 +188,7 @@ export default function App() {
           )}
 
           {errorMsg && (
-            <Toast message={errorMsg} onDismiss={() => setErrorMsg("")} />
+            <Toast message={errorMsg} onDismiss={() => safeSet(setErrorMsg, "")} />
           )}
         </div>
       </div>

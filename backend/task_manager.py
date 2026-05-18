@@ -1,6 +1,7 @@
 import asyncio
 import os
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -11,6 +12,8 @@ from translator.types import TranslationConfig, ProgressStats
 from translator.logger import get_logger
 
 logger = get_logger(__name__)
+
+TASK_MAX_AGE_SECONDS = 3600  # 1 hora
 
 
 class TaskStatus(str, Enum):
@@ -32,6 +35,7 @@ class Task:
     progress: Optional[ProgressStats] = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
     queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    created_at: float = field(default_factory=time.time)
 
 
 _tasks: dict[str, Task] = {}
@@ -52,18 +56,42 @@ def get_task(task_id: str) -> Optional[Task]:
         return _tasks.get(task_id)
 
 
+def cancel_task(task_id: str) -> bool:
+    task = get_task(task_id)
+    if task and task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
+        task.cancel_event.set()
+        task.status = TaskStatus.CANCELLED
+        logger.info("Task %s cancelada.", task_id)
+        return True
+    return False
+
+
+def cleanup_old_tasks() -> int:
+    now = time.time()
+    to_delete: list[str] = []
+    with _lock:
+        for tid, task in list(_tasks.items()):
+            if task.status in (TaskStatus.COMPLETED, TaskStatus.CANCELLED, TaskStatus.ERROR):
+                if now - task.created_at > TASK_MAX_AGE_SECONDS:
+                    to_delete.append(tid)
+        for tid in to_delete:
+            del _tasks[tid]
+    if to_delete:
+        logger.info("Limpeza: %d tasks antigas removidas.", len(to_delete))
+    return len(to_delete)
+
+
 def run_task_in_background(task: Task, cfg: TranslationConfig) -> None:
     def _run():
         task.status = TaskStatus.RUNNING
         task.config = cfg
 
-        async def _put_token(msg: str):
-            await task.queue.put(("token", msg))
-
         def _on_token(tok: str):
+            if task.cancel_event.is_set():
+                return
             try:
                 loop = asyncio.new_event_loop()
-                loop.run_until_complete(_put_token(tok))
+                loop.run_until_complete(task.queue.put(("token", tok)))
                 loop.close()
             except Exception:
                 pass
@@ -78,43 +106,42 @@ def run_task_in_background(task: Task, cfg: TranslationConfig) -> None:
                 pass
 
         try:
+            if task.cancel_event.is_set():
+                task.status = TaskStatus.CANCELLED
+                _safe_put(task.queue, ("done", None))
+                return
+
             out_path = run_translation(
                 cfg,
                 on_token=_on_token,
                 on_progress=_on_progress,
                 should_cancel=lambda: task.cancel_event.is_set(),
             )
+
             if task.cancel_event.is_set():
                 task.status = TaskStatus.CANCELLED
-                task.queue.put_nowait(("done", None))
             elif out_path:
                 task.status = TaskStatus.COMPLETED
                 task.result_path = out_path
-                task.queue.put_nowait(("done", out_path))
             else:
                 task.status = TaskStatus.ERROR
-                task.error = "Tradução retornou sem resultado"
-                task.queue.put_nowait(("done", None))
+                task.error = "Tradução retornou sem resultado."
+
+            _safe_put(task.queue, ("done", task.result_path))
+
         except Exception as exc:
             logger.error("Task %s falhou: %s", task.id, exc, exc_info=True)
             task.status = TaskStatus.ERROR
             task.error = str(exc)
-            try:
-                loop = asyncio.new_event_loop()
-                loop.run_until_complete(task.queue.put(("error", str(exc))))
-                loop.close()
-            except Exception:
-                pass
-            task.queue.put_nowait(("done", None))
+            _safe_put(task.queue, ("error", str(exc)))
+            _safe_put(task.queue, ("done", None))
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
 
 
-def cancel_task(task_id: str) -> bool:
-    task = get_task(task_id)
-    if task and task.status in (TaskStatus.PENDING, TaskStatus.RUNNING):
-        task.cancel_event.set()
-        logger.info("Cancelamento solicitado para task %s", task_id)
-        return True
-    return False
+def _safe_put(queue: asyncio.Queue, item) -> None:
+    try:
+        queue.put_nowait(item)
+    except Exception:
+        pass

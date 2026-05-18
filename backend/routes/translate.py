@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from backend.task_manager import create_task, run_task_in_background, get_task, cancel_task
+from backend.task_manager import create_task, run_task_in_background, get_task, cancel_task, cleanup_old_tasks
 from translator.types import TranslationConfig
 from translator.logger import get_logger
 
@@ -34,22 +34,29 @@ class TranslateRequest(BaseModel):
 @router.post("/translate")
 async def translate(req: TranslateRequest):
     if not req.api_key:
-        raise HTTPException(status_code=400, detail="API key não informada")
+        raise HTTPException(status_code=400, detail="API key não informada.")
+    if not req.file_id:
+        raise HTTPException(status_code=400, detail="file_id não informado.")
 
-    upload_dir = UPLOAD_DIR
-    ext = ".pdf"
-    import glob
-    matches = list(glob.glob(os.path.join(upload_dir, f"{req.file_id}.*")))
+    if req.temperature < 0 or req.temperature > 2:
+        raise HTTPException(status_code=400, detail="Temperature deve estar entre 0 e 2.")
+    if req.chunk_chars < 500 or req.chunk_chars > 50000:
+        raise HTTPException(status_code=400, detail="Chars por chunk deve estar entre 500 e 50000.")
+    if req.parallel_chunks < 1 or req.parallel_chunks > 8:
+        raise HTTPException(status_code=400, detail="Parallel chunks deve estar entre 1 e 8.")
+
+    cleanup_old_tasks()
+
+    matches = list(glob.glob(os.path.join(UPLOAD_DIR, f"{req.file_id}.*")))
     if not matches:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado. Faça upload primeiro.")
 
     input_path = matches[0]
-    ext = os.path.splitext(input_path)[1].lower()
 
-    if not os.path.exists(input_path):
+    if not os.path.isfile(input_path):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado no servidor.")
 
-    out_dir = os.path.join(upload_dir, "output")
+    out_dir = os.path.join(UPLOAD_DIR, "output")
     os.makedirs(out_dir, exist_ok=True)
 
     cfg = TranslationConfig(
@@ -76,34 +83,41 @@ async def translate(req: TranslateRequest):
 async def translate_stream(task_id: str):
     task = get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task não encontrada")
+        raise HTTPException(status_code=404, detail="Task não encontrada.")
 
     async def event_generator():
         yield {"event": "status", "data": json.dumps({"status": task.status.value})}
 
-        while task.status in ("pending", "running"):
-            try:
-                msg_type, payload = await asyncio.wait_for(task.queue.get(), timeout=2.0)
-            except asyncio.TimeoutError:
-                yield {"event": "ping", "data": ""}
-                continue
+        try:
+            while task.status in ("pending", "running"):
+                try:
+                    msg_type, payload = await asyncio.wait_for(task.queue.get(), timeout=3.0)
+                except asyncio.TimeoutError:
+                    if task.status not in ("pending", "running"):
+                        break
+                    yield {"event": "ping", "data": ""}
+                    continue
 
-            if msg_type == "token":
-                yield {"event": "token", "data": json.dumps({"text": payload})}
-            elif msg_type == "progress":
-                yield {
-                    "event": "progress",
-                    "data": json.dumps({
-                        "idx": payload.idx,
-                        "total": payload.total,
-                        "elapsed": round(payload.elapsed, 1),
-                        "eta": round(payload.eta, 1),
-                        "avg_per_part": round(payload.avg_per_part, 1),
-                        "speed_parts_per_min": round(payload.speed_parts_per_min, 2),
-                    }),
-                }
-            elif msg_type in ("done", "error"):
-                break
+                if msg_type == "token":
+                    yield {"event": "token", "data": json.dumps({"text": payload})}
+                elif msg_type == "progress":
+                    yield {
+                        "event": "progress",
+                        "data": json.dumps({
+                            "idx": payload.idx,
+                            "total": payload.total,
+                            "elapsed": round(payload.elapsed, 1),
+                            "eta": round(payload.eta, 1),
+                            "avg_per_part": round(payload.avg_per_part, 1),
+                            "speed_parts_per_min": round(payload.speed_parts_per_min, 2),
+                        }),
+                    }
+                elif msg_type in ("done", "error"):
+                    break
+        except asyncio.CancelledError:
+            logger.info("SSE client desconectou da task %s", task_id)
+        except Exception as exc:
+            logger.error("Erro no SSE da task %s: %s", task_id, exc)
 
         yield {
             "event": "result",
@@ -121,7 +135,7 @@ async def translate_stream(task_id: str):
 async def translate_status(task_id: str):
     task = get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task não encontrada")
+        raise HTTPException(status_code=404, detail="Task não encontrada.")
 
     return {
         "task_id": task.id,
@@ -141,4 +155,4 @@ async def translate_status(task_id: str):
 async def translate_cancel(task_id: str):
     if cancel_task(task_id):
         return {"status": "cancelled"}
-    raise HTTPException(status_code=404, detail="Task não encontrada ou já finalizada")
+    raise HTTPException(status_code=404, detail="Task não encontrada ou já finalizada.")

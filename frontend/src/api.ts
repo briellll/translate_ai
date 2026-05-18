@@ -23,11 +23,12 @@ export async function startTranslation(config: {
   max_tokens: number | null;
   parallel_chunks: number;
   base_url: string | null;
-}): Promise<{ task_id: string }> {
+}, signal?: AbortSignal): Promise<{ task_id: string }> {
   const resp = await fetch(`${API_BASE}/translate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
+    signal,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: "Erro ao iniciar tradução" }));

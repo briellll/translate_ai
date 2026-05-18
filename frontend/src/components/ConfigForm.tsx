@@ -35,6 +35,14 @@ export default function ConfigForm({
   const isCustom = provider.id === "custom";
   const activeModel = isCustom ? customModel : model;
 
+  const baseUrlError = isCustom && customBaseUrl.length > 0
+    ? (!customBaseUrl.startsWith("http://") && !customBaseUrl.startsWith("https://")
+      ? "URL deve começar com http:// ou https://"
+      : !customBaseUrl.endsWith("/v1")
+        ? "A maioria das APIs espera URL terminando em /v1"
+        : "")
+    : "";
+
   const handleProviderChange = (id: string) => {
     const p = PROVIDERS.find((pr) => pr.id === id) || PROVIDERS[0];
     setProvider(p);
@@ -129,15 +137,22 @@ export default function ConfigForm({
         {isCustom && (
           <div className="md:col-span-2">
             <label className="block text-xs text-gray-400 mb-1">URL base da API</label>
-            <p className="text-xs text-gray-500 mb-1">URL completa do endpoint compatível com OpenAI. Ex: <code className="text-gray-400">https://api.seuservico.com/v1</code></p>
+            <p className="text-xs text-gray-500 mb-1">Endpoint compatível com OpenAI. Ex: <code className="text-gray-400">https://api.seuservico.com/v1</code>. URL errada resulta em erro de conexão.</p>
             <input
               type="text"
               value={customBaseUrl}
               onChange={(e) => setCustomBaseUrl(e.target.value)}
-              placeholder="https://..."
+              placeholder="https://api.seuservico.com/v1"
               disabled={translating}
-              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm outline-none focus:border-green-500 transition-colors disabled:opacity-50"
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors disabled:opacity-50 ${
+                baseUrlError && customBaseUrl.length > 0
+                  ? "border-yellow-600 bg-gray-800 focus:border-yellow-500"
+                  : "border-gray-700 bg-gray-800 focus:border-green-500"
+              }`}
             />
+            {baseUrlError && (
+              <p className="text-xs text-yellow-400 mt-1">{baseUrlError}</p>
+            )}
           </div>
         )}
 
@@ -203,7 +218,7 @@ export default function ConfigForm({
         {!translating ? (
           <button
             type="submit"
-            disabled={disabled || !apiKey || !activeModel}
+            disabled={disabled || !apiKey || !activeModel || !!baseUrlError}
             className="rounded-lg bg-green-600 px-6 py-2 text-sm font-medium hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Iniciar tradução

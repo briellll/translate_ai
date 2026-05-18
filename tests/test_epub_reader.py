@@ -83,3 +83,13 @@ def test_extract_text_from_epub_raises_on_missing_file(mock_read):
     mock_read.side_effect = FileNotFoundError("Arquivo não encontrado")
     with pytest.raises(FileNotFoundError):
         extract_text_from_epub("missing.epub")
+
+
+@patch("translator.epub_reader.epub.read_epub")
+def test_extract_text_from_epub_no_items_in_spine(mock_read):
+    mock_book = MagicMock()
+    mock_book.spine = []
+    mock_read.return_value = mock_book
+
+    with pytest.raises(ValueError, match="vazio"):
+        extract_text_from_epub("empty.epub")

@@ -6,6 +6,10 @@ from openai import (
     APITimeoutError,
     APIConnectionError,
     InternalServerError,
+    BadRequestError,
+    AuthenticationError,
+    NotFoundError,
+    ContentFilterFinishReasonError,
 )
 
 from .logger import get_logger
@@ -18,6 +22,14 @@ RETRYABLE_ERRORS = (
     APIConnectionError,
     InternalServerError,
 )
+
+NON_RETRYABLE_MESSAGES = {
+    "model_not_found": "Modelo não encontrado. Verifique se o nome está correto e se você tem acesso a ele.",
+    "insufficient_quota": "Cota insuficiente. Verifique seu plano e saldo.",
+    "invalid_api_key": "API key inválida. Verifique se a chave está correta.",
+    "content_filter": "Conteúdo bloqueado pelo filtro de moderação da API.",
+    "context_length": "Texto muito longo para o modelo escolhido. Reduza 'Chars por chunk'.",
+}
 
 
 def _retry_decorator():
@@ -35,13 +47,13 @@ def _retry_decorator():
 
 
 def _build_client(api_key: str, base_url: str | None = None) -> OpenAI:
-    kwargs = {"api_key": api_key}
+    kwargs = {"api_key": api_key, "timeout": 60.0, "max_retries": 0}
     if base_url:
         kwargs["base_url"] = base_url
     return OpenAI(**kwargs)
 
 
-def _build_messages(chunk: str, temperature: float = 0) -> list[dict]:
+def _build_messages(chunk: str) -> list[dict]:
     return [
         {
             "role": "system",
@@ -55,6 +67,32 @@ def _build_messages(chunk: str, temperature: float = 0) -> list[dict]:
     ]
 
 
+def _translate_error(exc: Exception) -> str:
+    msg = str(exc).lower()
+
+    if isinstance(exc, AuthenticationError):
+        return NON_RETRYABLE_MESSAGES["invalid_api_key"]
+    if isinstance(exc, NotFoundError):
+        return NON_RETRYABLE_MESSAGES["model_not_found"]
+    if isinstance(exc, ContentFilterFinishReasonError):
+        return NON_RETRYABLE_MESSAGES["content_filter"]
+    if isinstance(exc, BadRequestError):
+        if "maximum context length" in msg or "context_length_exceeded" in msg:
+            return NON_RETRYABLE_MESSAGES["context_length"]
+        if "insufficient_quota" in msg:
+            return NON_RETRYABLE_MESSAGES["insufficient_quota"]
+        if "model_not_found" in msg:
+            return NON_RETRYABLE_MESSAGES["model_not_found"]
+    if isinstance(exc, RateLimitError):
+        return "Limite de requisições excedido. Aguarde alguns segundos e tente novamente."
+    if isinstance(exc, APITimeoutError):
+        return "Tempo limite excedido. O servidor demorou muito para responder."
+    if isinstance(exc, APIConnectionError):
+        return "Falha de conexão. Verifique a URL base e sua conexão de rede."
+
+    return f"Erro na tradução: {exc}"
+
+
 @_retry_decorator()
 def translate_chunk_with_openai(
     chunk: str,
@@ -66,15 +104,19 @@ def translate_chunk_with_openai(
     base_url: Optional[str] = None,
 ) -> str:
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY ausente")
+        raise RuntimeError("API key não informada.")
+    if not chunk.strip():
+        return ""
+
     logger.info(
         "Traduzindo chunk (non-streaming) | modelo=%s | chars=%d | temp=%.1f",
         model, len(chunk), temperature,
     )
+
     client = _build_client(api_key, base_url)
     kwargs = dict(
         model=model,
-        messages=_build_messages(chunk, temperature),
+        messages=_build_messages(chunk),
         temperature=temperature,
         top_p=top_p,
     )
@@ -83,10 +125,12 @@ def translate_chunk_with_openai(
 
     try:
         resp = client.chat.completions.create(**kwargs)
-        return resp.choices[0].message.content or ""
-    except Exception as exc:
-        logger.error("Falha na tradução non-streaming: %s", exc, exc_info=True)
+        content = resp.choices[0].message.content
+        return (content or "").strip()
+    except tuple(RETRYABLE_ERRORS):
         raise
+    except Exception as exc:
+        raise RuntimeError(_translate_error(exc)) from exc
 
 
 @_retry_decorator()
@@ -100,15 +144,19 @@ def stream_translate_chunk_with_openai(
     base_url: Optional[str] = None,
 ) -> Iterator[str]:
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY ausente")
+        raise RuntimeError("API key não informada.")
+    if not chunk.strip():
+        return
+
     logger.info(
         "Traduzindo chunk (streaming) | modelo=%s | chars=%d | temp=%.1f",
         model, len(chunk), temperature,
     )
+
     client = _build_client(api_key, base_url)
     kwargs = dict(
         model=model,
-        messages=_build_messages(chunk, temperature),
+        messages=_build_messages(chunk),
         temperature=temperature,
         top_p=top_p,
         stream=True,
@@ -119,9 +167,12 @@ def stream_translate_chunk_with_openai(
     try:
         stream = client.chat.completions.create(**kwargs)
         for part in stream:
-            delta = part.choices[0].delta
+            if part.choices and part.choices[0].finish_reason == "content_filter":
+                raise ContentFilterFinishReasonError(NON_RETRYABLE_MESSAGES["content_filter"])
+            delta = part.choices[0].delta if part.choices else None
             if delta and getattr(delta, "content", None):
                 yield delta.content
-    except Exception as exc:
-        logger.error("Falha no streaming: %s", exc, exc_info=True)
+    except tuple(RETRYABLE_ERRORS):
         raise
+    except Exception as exc:
+        raise RuntimeError(_translate_error(exc)) from exc

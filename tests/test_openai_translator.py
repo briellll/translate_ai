@@ -9,12 +9,12 @@ from translator.openai_translator import (
 
 
 def test_translate_chunk_without_api_key():
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY ausente"):
+    with pytest.raises(RuntimeError, match="API key n"):
         translate_chunk_with_openai("hello", api_key=None)
 
 
 def test_stream_translate_chunk_without_api_key():
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY ausente"):
+    with pytest.raises(RuntimeError, match="API key n"):
         next(stream_translate_chunk_with_openai("hello", api_key=None))
 
 
