@@ -1,7 +1,7 @@
 import os
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -37,9 +37,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(upload_router, tags=["Upload"])
-app.include_router(translate_router, tags=["Translate"])
-app.include_router(download_router, tags=["Download"])
+# Monta as rotas da API com e sem prefixo /api
+# para funcionar tanto com Vite proxy (5173) quanto em produção direta (8000)
+api = APIRouter(prefix="/api")
+api.include_router(upload_router)
+api.include_router(translate_router)
+api.include_router(download_router)
+app.include_router(api)
+app.include_router(upload_router)
+app.include_router(translate_router)
+app.include_router(download_router)
 
 
 @app.get("/health")
@@ -52,6 +59,9 @@ if os.path.isdir(FRONTEND_DIST):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
+        if full_path.startswith("api/"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Not found"}, status_code=404)
         file_path = os.path.join(FRONTEND_DIST, full_path)
         if os.path.isfile(file_path):
             return FileResponse(file_path)

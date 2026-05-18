@@ -20,14 +20,15 @@ export default function App() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const abortRef = useRef<AbortController | null>(null);
-  const mountedRef = useRef(true);
+const mountedRef = useRef(true);
 
-  useEffect(() => {
+useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       abortRef.current?.abort();
     };
-  }, []);
+}, []);
 
   const safeSet = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: T) => {
     if (mountedRef.current) setter(value);
