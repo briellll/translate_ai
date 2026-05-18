@@ -8,8 +8,10 @@ from .chunker import chunk_pages
 from .epub_reader import extract_text_from_epub
 from .exporter import export_to_epub, export_to_pdf, export_to_txt
 from .logger import get_logger
+from .markup_reader import extract_text_from_pdf_with_marks, extract_html_tree_from_epub, translate_html_soup
 from .openai_translator import stream_translate_chunk_with_openai, translate_chunk_with_openai
 from .pdf_reader import extract_text_from_pdf
+from .premium_pdf_reader import extract_premium_pdf, spans_to_markdown, PageContent
 from .types import ProgressStats, TranslationConfig
 from .validation import validate_config
 
@@ -51,6 +53,47 @@ def _cleanup_state(state_path: str) -> None:
         logger.warning("Falha ao limpar arquivo de estado: %s", exc)
 
 
+def _export_epub_preserved(
+    translated_chunks: List[str],
+    original_chapters: list,
+    out_path: str,
+    title: str,
+) -> None:
+    from bs4 import NavigableString, Tag
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_title(title or "Tradução")
+    book.add_author("Tradutor AI")
+    safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in (title or "Tradução"))
+    chapters = []
+
+    for i, (translated_text, (orig_html, soup)) in enumerate(zip(translated_chunks, original_chapters), 1):
+        translated_lines = translated_text.split("\n")
+        line_idx = [0]
+
+        def _replace_text(node):
+            for child in list(node.children):
+                if isinstance(child, NavigableString) and child.strip():
+                    if line_idx[0] < len(translated_lines):
+                        child.replace_with(NavigableString(translated_lines[line_idx[0]]))
+                        line_idx[0] += 1
+                elif isinstance(child, Tag):
+                    _replace_text(child)
+
+        _replace_text(soup)
+        ch = epub.EpubHtml(title=safe_title, file_name=f"part_{i}.xhtml", lang="pt")
+        ch.content = str(soup)
+        book.add_item(ch)
+        chapters.append(ch)
+
+    book.toc = tuple(chapters)
+    book.spine = ["nav"] + chapters
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    epub.write_epub(out_path, book)
+
+
 def _translate_single_chunk(
     ch: str,
     idx: int,
@@ -69,6 +112,7 @@ def _translate_single_chunk(
         top_p=cfg.top_p,
         max_tokens=cfg.max_tokens,
         base_url=cfg.base_url,
+        preserve_formatting=cfg.preserve_formatting,
     )
 
     acc: List[str] = []
@@ -113,10 +157,41 @@ def run_translation(
     safe_base = "".join(c if c.isalnum() or c in "._-" else "_" for c in base)
     ext = os.path.splitext(cfg.input_path)[1].lower()
 
+    preserve = cfg.preserve_formatting
+
+    epub_html_chapters: list = []
+    pdf_images: List[List] = []
+
     if ext == ".pdf":
-        pages = extract_text_from_pdf(cfg.input_path)
+        if preserve:
+            try:
+                pages_content = extract_premium_pdf(cfg.input_path)
+                pages = [spans_to_markdown(p.spans) for p in pages_content]
+                pdf_images = [p.images for p in pages_content]
+                body_size = 12.0
+                text_lens = [len(p) for p in pages if len(p) > 20]
+                if text_lens:
+                    sizes = {}
+                    for p in pages_content:
+                        for s in p.spans:
+                            sz = round(s.size, 1)
+                            sizes[sz] = sizes.get(sz, 0) + len(s.text)
+                    if sizes:
+                        body_size = max(sizes, key=sizes.get)
+                pages = [spans_to_markdown(p.spans, body_size) for p in pages_content]
+            except (ValueError, ImportError):
+                pages_content = extract_text_from_pdf_with_marks(cfg.input_path)
+                pages = pages_content
+                pdf_images = []
+        else:
+            pages = extract_text_from_pdf(cfg.input_path)
+            pdf_images = []
     elif ext == ".epub":
-        pages = extract_text_from_epub(cfg.input_path)
+        if preserve:
+            epub_html_chapters = extract_html_tree_from_epub(cfg.input_path)
+            pages = [soup.get_text("\n") for _, soup in epub_html_chapters]
+        else:
+            pages = extract_text_from_epub(cfg.input_path)
     else:
         raise ValueError("Formato não suportado. Use .pdf ou .epub")
 
@@ -163,9 +238,11 @@ def run_translation(
 
     try:
         if cfg.out_format == "pdf":
-            export_to_pdf(translated, out_path)
+            export_to_pdf(translated, out_path, images=pdf_images if pdf_images else None)
         elif cfg.out_format == "txt":
             export_to_txt(translated, out_path)
+        elif epub_html_chapters and preserve:
+            _export_epub_preserved(translated, epub_html_chapters, out_path, base)
         else:
             export_to_epub(translated, out_path, title=base)
     except (OSError, PermissionError) as exc:

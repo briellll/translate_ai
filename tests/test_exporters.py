@@ -57,11 +57,49 @@ def test_export_to_epub_creates_file():
 
 
 def test_export_to_epub_empty():
-    with tempfile.NamedTemporaryFile(suffix=".epub", delete=False) as f:
-        path = f.name
+    import time
+    path = os.path.join(tempfile.gettempdir(), f"test_empty_{time.time()}.epub")
     try:
         export_to_epub([], path, title="Vazio")
         assert os.path.exists(path)
     finally:
         if os.path.exists(path):
+            time.sleep(0.1)
+            try:
+                os.unlink(path)
+            except PermissionError:
+                pass
+
+
+def test_export_to_pdf_with_markup():
+    chunks = [
+        "# Título Principal\n\n**Negrito** e *itálico* e ***ambos***\n\nTexto normal com `código`.\n\n---",
+    ]
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        path = f.name
+    try:
+        export_to_pdf(chunks, path)
+        assert os.path.exists(path)
+        assert os.path.getsize(path) > 200
+    finally:
+        if os.path.exists(path):
             os.unlink(path)
+
+
+def test_export_to_epub_with_markup():
+    import time
+    chunks = [
+        "# Capítulo 1\n\n**Texto em negrito** preservado no EPUB.\n\n*Itálico* também funciona.",
+    ]
+    path = os.path.join(tempfile.gettempdir(), f"test_markup_epub_{time.time()}.epub")
+    try:
+        export_to_epub(chunks, path, title="Teste Markup")
+        assert os.path.exists(path)
+        assert os.path.getsize(path) > 200
+    finally:
+        if os.path.exists(path):
+            time.sleep(0.1)
+            try:
+                os.unlink(path)
+            except PermissionError:
+                pass

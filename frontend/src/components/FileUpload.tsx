@@ -69,7 +69,10 @@ export default function FileUpload({ file, disabled, onUpload, onRemove }: Props
         Arraste um arquivo PDF ou EPUB aqui ou clique para selecionar
       </p>
       <p className="text-xs text-gray-500 mt-2">
-        Formatos aceitos: <code className="text-gray-400">.pdf</code> (texto extraído página por página) e <code className="text-gray-400">.epub</code> (capítulos extraídos). PDFs escaneados (imagem) não são suportados.
+        Formatos aceitos: <code className="text-gray-400">.pdf</code> e <code className="text-gray-400">.epub</code>.
+        PDFs escaneados (imagem) <strong className="text-yellow-400">não funcionam</strong>.
+        A formatação original (negrito, itálico, tabelas, imagens) <strong className="text-yellow-400">não é preservada</strong> na saída.
+        Para melhor resultado, prefira <code className="text-gray-400">EPUB</code> (formatação básica preservada).
       </p>
     </div>
   );

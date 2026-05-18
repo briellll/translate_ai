@@ -53,16 +53,25 @@ def _build_client(api_key: str, base_url: str | None = None) -> OpenAI:
     return OpenAI(**kwargs)
 
 
-def _build_messages(chunk: str) -> list[dict]:
+SYSTEM_PROMPT_BASE = (
+    "You are a precise technical translator. "
+    "Translate to Portuguese. "
+    "Return only the translated text."
+)
+
+SYSTEM_PROMPT_WITH_MARKS = (
+    "You are a precise technical translator. "
+    "Translate to Portuguese. The text contains formatting markers: "
+    "**bold**, *italic*, ***bold italic***, `code`, and # headings. "
+    "Preserve these markers exactly as they appear in your translation. "
+    "Return only the translated text with markers."
+)
+
+
+def _build_messages(chunk: str, preserve_formatting: bool = False) -> list[dict]:
+    system = SYSTEM_PROMPT_WITH_MARKS if preserve_formatting else SYSTEM_PROMPT_BASE
     return [
-        {
-            "role": "system",
-            "content": (
-                "You are a precise technical translator. "
-                "Translate to Portuguese preserving technical terms and formatting. "
-                "Return only the translated text."
-            ),
-        },
+        {"role": "system", "content": system},
         {"role": "user", "content": chunk},
     ]
 
@@ -102,6 +111,7 @@ def translate_chunk_with_openai(
     top_p: float = 1.0,
     max_tokens: Optional[int] = None,
     base_url: Optional[str] = None,
+    preserve_formatting: bool = False,
 ) -> str:
     if not api_key:
         raise RuntimeError("API key não informada.")
@@ -109,14 +119,14 @@ def translate_chunk_with_openai(
         return ""
 
     logger.info(
-        "Traduzindo chunk (non-streaming) | modelo=%s | chars=%d | temp=%.1f",
-        model, len(chunk), temperature,
+        "Traduzindo chunk (non-streaming) | modelo=%s | chars=%d | temp=%.1f | fmt=%s",
+        model, len(chunk), temperature, preserve_formatting,
     )
 
     client = _build_client(api_key, base_url)
     kwargs = dict(
         model=model,
-        messages=_build_messages(chunk),
+        messages=_build_messages(chunk, preserve_formatting),
         temperature=temperature,
         top_p=top_p,
     )
@@ -142,6 +152,7 @@ def stream_translate_chunk_with_openai(
     top_p: float = 1.0,
     max_tokens: Optional[int] = None,
     base_url: Optional[str] = None,
+    preserve_formatting: bool = False,
 ) -> Iterator[str]:
     if not api_key:
         raise RuntimeError("API key não informada.")
@@ -149,14 +160,14 @@ def stream_translate_chunk_with_openai(
         return
 
     logger.info(
-        "Traduzindo chunk (streaming) | modelo=%s | chars=%d | temp=%.1f",
-        model, len(chunk), temperature,
+        "Traduzindo chunk (streaming) | modelo=%s | chars=%d | temp=%.1f | fmt=%s",
+        model, len(chunk), temperature, preserve_formatting,
     )
 
     client = _build_client(api_key, base_url)
     kwargs = dict(
         model=model,
-        messages=_build_messages(chunk),
+        messages=_build_messages(chunk, preserve_formatting),
         temperature=temperature,
         top_p=top_p,
         stream=True,

@@ -13,6 +13,7 @@ class TranslationConfig:
     top_p: float = 1.0
     max_tokens: int | None = None
     base_url: str | None = None  # URL base da API (OpenAI, Groq, Together, etc.)
+    preserve_formatting: bool = False  # preserva **bold**, *italic*, # headings na saída
     parallel_chunks: int = 1  # >1 habilita tradução paralela
     task_id: str | None = None  # para persistência de progresso
     resume: bool = False

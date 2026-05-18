@@ -5,6 +5,7 @@ import FileUpload from "./components/FileUpload";
 import ConfigForm from "./components/ConfigForm";
 import PreviewPane from "./components/PreviewPane";
 import ProgressPanel from "./components/ProgressPanel";
+import LimitationsBanner from "./components/LimitationsBanner";
 import Toast from "./components/Toast";
 
 type AppStatus = "idle" | "uploading" | "translating" | "completed" | "error";
@@ -140,7 +141,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-4 md:p-8">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-6xl">
         <header className="mb-8">
           <h1 className="text-2xl font-bold text-green-400">Tradutor AI</h1>
           <p className="text-sm text-gray-400 mt-1">
@@ -148,48 +149,60 @@ export default function App() {
           </p>
         </header>
 
-        <div className="space-y-6">
-          <FileUpload
-            file={file}
-            disabled={status === "translating"}
-            onUpload={handleUpload}
-            onRemove={handleReset}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <FileUpload
+              file={file}
+              disabled={status === "translating"}
+              onUpload={handleUpload}
+              onRemove={handleReset}
+            />
 
-          <ConfigForm
-            apiKey={apiKey}
-            onApiKeyChange={setApiKey}
-            disabled={!fileId || status === "translating"}
-            translating={status === "translating"}
-            onTranslate={handleTranslate}
-            onCancel={handleCancel}
-          />
+            <ConfigForm
+              apiKey={apiKey}
+              onApiKeyChange={setApiKey}
+              disabled={!fileId || status === "translating"}
+              translating={status === "translating"}
+              onTranslate={handleTranslate}
+              onCancel={handleCancel}
+            />
 
-          {progress && <ProgressPanel data={progress} />}
+            {progress && <ProgressPanel data={progress} />}
 
-          {translatedText && <PreviewPane text={translatedText} />}
+            {translatedText && <PreviewPane text={translatedText} />}
 
-          {downloadUrl && (
-            <div className="flex gap-3 items-center">
-              <a
-                href={downloadUrl}
-                download
-                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-500 transition-colors"
-              >
-                Baixar tradução
-              </a>
-              <button
-                onClick={handleReset}
-                className="rounded-lg border border-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-800 transition-colors"
-              >
-                Nova tradução
-              </button>
+            {downloadUrl && (
+              <div className="flex gap-3 items-center">
+                <a
+                  href={downloadUrl}
+                  download
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-500 transition-colors"
+                >
+                  Baixar tradução
+                </a>
+                <button
+                  onClick={handleReset}
+                  className="rounded-lg border border-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-800 transition-colors"
+                >
+                  Nova tradução
+                </button>
+              </div>
+            )}
+
+            {errorMsg && (
+              <Toast message={errorMsg} onDismiss={() => safeSet(setErrorMsg, "")} />
+            )}
+          </div>
+
+          <div className="hidden lg:block lg:col-span-1">
+            <div className="sticky top-8">
+              <LimitationsBanner sidebar />
             </div>
-          )}
+          </div>
 
-          {errorMsg && (
-            <Toast message={errorMsg} onDismiss={() => safeSet(setErrorMsg, "")} />
-          )}
+          <div className="lg:hidden">
+            <LimitationsBanner />
+          </div>
         </div>
       </div>
     </div>

@@ -183,7 +183,7 @@ export default function ConfigForm({
           <label className="block text-xs text-gray-400 mb-1">
             Chars por chunk: {chunkChars}
           </label>
-          <p className="text-xs text-gray-500 mb-1">Reduza se o modelo demorar ou estourar limite de tokens.</p>
+          <p className="text-xs text-gray-500 mb-1">O documento é dividido em partes (chunks) para tradução. Cada chunk é enviado separadamente para a API. Valor maior = menos requisições, mas mais risco de estourar o limite de tokens do modelo. Reduza se o modelo demorar muito ou der erro de contexto. Valor menor = mais requisições, mas cada uma processa mais rápido.</p>
           <input
             type="range"
             min={1000}

@@ -8,6 +8,9 @@ packages = [{include = "translator", from = "backend"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 pypdf = "^5.1"
+PyMuPDF = "^1.27"
+pdfplumber = "^0.11"
+pdfminer-six = "^2025"
 tqdm = "^4.66"
 ebooklib = "^0.18"
 beautifulsoup4 = "^4.12"
