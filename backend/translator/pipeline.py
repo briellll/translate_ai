@@ -64,6 +64,7 @@ def _translate_single_chunk(
         temperature=cfg.temperature,
         top_p=cfg.top_p,
         max_tokens=cfg.max_tokens,
+        base_url=cfg.base_url,
     )
 
     acc: List[str] = []

@@ -46,20 +46,14 @@ def test_translate_missing_file():
     assert resp.status_code == 404
 
 
-def test_translate_invalid_api_key():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("backend.routes.upload.UPLOAD_DIR", tmpdir):
-            content = b"%PDF-1.4 fake pdf\n" * 10
-            upload_resp = client.post("/upload", files={"file": ("doc.pdf", content, "application/pdf")})
-            file_id = upload_resp.json()["file_id"]
-
-        with patch("backend.routes.translate.UPLOAD_DIR", tmpdir):
-            resp = client.post("/translate", json={
-                "file_id": file_id,
-                "api_key": "bad-key",
-            })
-            assert resp.status_code == 400
-            assert "api key" in resp.json()["detail"].lower()
+def test_translate_empty_api_key():
+    resp = client.post("/translate", json={
+        "file_id": "any",
+        "api_key": "",
+        "out_format": "txt",
+    })
+    assert resp.status_code == 400
+    assert "api key" in resp.json()["detail"].lower()
 
 
 @patch("backend.task_manager.run_translation")

@@ -29,9 +29,7 @@ def validate_config(cfg: TranslationConfig) -> list[str]:
                 logger.warning("Arquivo grande (%d MB). A tradução pode demorar.", size_mb)
 
     if not cfg.api_key:
-        errors.append("API key da OpenAI não informada.")
-    elif not cfg.api_key.startswith("sk-"):
-        errors.append("API key parece inválida (deve começar com 'sk-').")
+        errors.append("API key não informada.")
 
     if cfg.out_format not in ALLOWED_OUT_FORMATS:
         errors.append(f"Formato de saída '{cfg.out_format}' inválido. Use {', '.join(sorted(ALLOWED_OUT_FORMATS))}.")

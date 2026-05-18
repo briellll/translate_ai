@@ -34,8 +34,11 @@ def _retry_decorator():
     )
 
 
-def _build_client(api_key: str) -> OpenAI:
-    return OpenAI(api_key=api_key)
+def _build_client(api_key: str, base_url: str | None = None) -> OpenAI:
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return OpenAI(**kwargs)
 
 
 def _build_messages(chunk: str, temperature: float = 0) -> list[dict]:
@@ -60,6 +63,7 @@ def translate_chunk_with_openai(
     temperature: float = 0,
     top_p: float = 1.0,
     max_tokens: Optional[int] = None,
+    base_url: Optional[str] = None,
 ) -> str:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY ausente")
@@ -67,7 +71,7 @@ def translate_chunk_with_openai(
         "Traduzindo chunk (non-streaming) | modelo=%s | chars=%d | temp=%.1f",
         model, len(chunk), temperature,
     )
-    client = _build_client(api_key)
+    client = _build_client(api_key, base_url)
     kwargs = dict(
         model=model,
         messages=_build_messages(chunk, temperature),
@@ -93,6 +97,7 @@ def stream_translate_chunk_with_openai(
     temperature: float = 0,
     top_p: float = 1.0,
     max_tokens: Optional[int] = None,
+    base_url: Optional[str] = None,
 ) -> Iterator[str]:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY ausente")
@@ -100,7 +105,7 @@ def stream_translate_chunk_with_openai(
         "Traduzindo chunk (streaming) | modelo=%s | chars=%d | temp=%.1f",
         model, len(chunk), temperature,
     )
-    client = _build_client(api_key)
+    client = _build_client(api_key, base_url)
     kwargs = dict(
         model=model,
         messages=_build_messages(chunk, temperature),

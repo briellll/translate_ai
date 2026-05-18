@@ -28,12 +28,13 @@ class TranslateRequest(BaseModel):
     top_p: float = 1.0
     max_tokens: int | None = None
     parallel_chunks: int = 1
+    base_url: str | None = None
 
 
 @router.post("/translate")
 async def translate(req: TranslateRequest):
-    if not req.api_key.startswith("sk-"):
-        raise HTTPException(status_code=400, detail="API key inválida")
+    if not req.api_key:
+        raise HTTPException(status_code=400, detail="API key não informada")
 
     upload_dir = UPLOAD_DIR
     ext = ".pdf"
@@ -62,6 +63,7 @@ async def translate(req: TranslateRequest):
         top_p=req.top_p,
         max_tokens=req.max_tokens,
         parallel_chunks=req.parallel_chunks,
+        base_url=req.base_url,
     )
 
     task = create_task(req.file_id)

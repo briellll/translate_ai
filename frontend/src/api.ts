@@ -22,6 +22,7 @@ export async function startTranslation(config: {
   top_p: number;
   max_tokens: number | null;
   parallel_chunks: number;
+  base_url: string | null;
 }): Promise<{ task_id: string }> {
   const resp = await fetch(`${API_BASE}/translate`, {
     method: "POST",

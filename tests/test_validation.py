@@ -47,7 +47,7 @@ def test_validate_config_missing_api_key():
         assert any("api key" in e.lower() for e in errors)
 
 
-def test_validate_config_invalid_api_key():
+def test_validate_config_empty_api_key():
     with tempfile.TemporaryDirectory() as tmpdir:
         input_path = os.path.join(tmpdir, "test.pdf")
         with open(input_path, "w") as f:
@@ -56,10 +56,10 @@ def test_validate_config_invalid_api_key():
             input_path=input_path,
             output_dir=tmpdir,
             out_format="pdf",
-            api_key="invalid-key",
+            api_key="",
         )
         errors = validate_config(cfg)
-        assert any("sk-" in e for e in errors)
+        assert any("api key" in e.lower() for e in errors)
 
 
 def test_validate_config_wrong_extension():

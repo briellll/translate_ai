@@ -39,6 +39,7 @@ export default function App() {
     chunk_chars: number;
     temperature: number;
     out_format: string;
+    base_url: string | null;
   }) => {
     if (!fileId || !apiKey) return;
 
@@ -59,6 +60,7 @@ export default function App() {
         top_p: 1.0,
         max_tokens: null,
         parallel_chunks: 1,
+        base_url: config.base_url,
       });
       tid = task_id;
       setTaskId(tid);
